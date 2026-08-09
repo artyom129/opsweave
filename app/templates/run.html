@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — Run #{{ run.id }}{% endblock %}
+{% block eyebrow %}Execution telemetry{% endblock %}
+{% block content %}
+<div class="page-title split"><div><span class="kicker">RUN #{{ run.id }}</span><h1>{{ workflow.name }}</h1><p>Triggered by {{ run.trigger_type }} · {{ run.started_at[:19].replace('T',' ') }}</p></div><span id="run-status" class="big-status {{ run.status }}">{{ run.status }}</span></div>
+<div class="run-layout">
+<section class="panel"><div class="panel-head"><div><span class="kicker">TIMELINE</span><h2>Step execution</h2></div><span class="badge" id="live-badge">live</span></div><div id="timeline" class="timeline">{% for step in run.steps %}<div class="timeline-item"><span class="timeline-dot {{ step.status }}"></span><div class="grow"><strong>{{ step.node_id }}</strong><small>{{ step.node_type }} · attempt {{ step.attempt }}{% if step.duration_ms %} · {{ step.duration_ms }}ms{% endif %}</small>{% if step.error %}<code>{{ step.error }}</code>{% endif %}</div><span class="pill">{{ step.status }}</span></div>{% endfor %}</div></section>
+<aside class="panel"><div class="panel-head"><div><span class="kicker">PAYLOAD</span><h2>Run context</h2></div></div><h4>Input</h4><pre>{{ run.input | tojson(indent=2) }}</pre><h4>Output</h4><pre id="run-output">{{ run.output | tojson(indent=2) if run.output else '{}' }}</pre>{% if run.error %}<h4>Error</h4><pre class="error-pre">{{ run.error }}</pre>{% endif %}</aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${wsProtocol}://${location.host}/ws/runs/{{ run.id }}`);
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === 'step.started' || msg.type === 'step.succeeded' || msg.type === 'step.failed' || msg.type === 'step.skipped') {
+    setTimeout(() => location.reload(), 250);
+  }
+  if (msg.type === 'run.succeeded' || msg.type === 'run.failed') setTimeout(() => location.reload(), 300);
+};
+ws.onerror = () => document.getElementById('live-badge').textContent = 'polling';
+</script>
+{% endblock %}

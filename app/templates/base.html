@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}OpsWeave{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/"><span class="brand-mark">OW</span><span><strong>OpsWeave</strong><small>automation control plane</small></span></a>
+      <nav>
+        <a class="nav-link" href="/">Overview</a>
+        <a class="nav-link" href="/workflows">Workflows</a>
+        <a class="nav-link" href="/dead-letters">Dead letters</a>
+        <a class="nav-link" href="/audit">Audit log</a>
+        <a class="nav-link" href="/secrets">Secret vault</a>
+        <a class="nav-link" href="/docs">API docs</a>
+      </nav>
+      <div class="sidebar-foot"><span class="status-dot"></span> engine online</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div>{% block eyebrow %}Operations{% endblock %}</div>
+        <div class="top-actions"><a class="ghost-btn" href="/api/runs-export.csv">Export runs</a><span class="badge">local-first</span></div>
+      </header>
+      <section class="content">{% block content %}{% endblock %}</section>
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

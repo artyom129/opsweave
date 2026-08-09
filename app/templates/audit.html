@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — Audit Log{% endblock %}
+{% block eyebrow %}Immutable activity trail{% endblock %}
+{% block content %}
+<div class="page-title"><div><span class="kicker">AUDIT TRAIL</span><h1>Operational history</h1><p>Workflow changes, queued executions, secret updates and recovery events in one searchable trail.</p></div></div>
+<section class="panel"><div class="panel-head"><div><span class="kicker">LATEST EVENTS</span><h2>Audit stream</h2></div></div>{% for item in items %}<div class="dead-row"><span class="status-icon succeeded"></span><span class="grow"><strong>{{ item.action }}</strong><small>{{ item.entity_type }} · {{ item.entity_id or '—' }} · {{ item.created_at[:19].replace('T',' ') }}</small></span><code>{{ item.details | tojson }}</code></div>{% else %}<div class="empty">No audit events yet.</div>{% endfor %}</section>
+{% endblock %}

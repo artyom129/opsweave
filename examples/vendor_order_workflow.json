@@ -1,0 +1,28 @@
+{
+  "name": "Vendor Order Intake Guard",
+  "description": "Normalize, validate and route incoming supplier orders.",
+  "trigger_type": "webhook",
+  "webhook_slug": "vendor-orders",
+  "is_enabled": true,
+  "definition": {
+    "nodes": [
+      {"id": "trigger", "type": "trigger", "label": "Incoming vendor order", "config": {}},
+      {"id": "normalize", "type": "transform", "label": "Normalize fields", "config": {"operations": [
+        {"source": "$.contact_email", "target": "contact_email", "op": "lower"},
+        {"source": "$.amount", "target": "amount", "op": "float"},
+        {"source": "$.currency", "target": "currency", "op": "upper"}
+      ]}},
+      {"id": "validate", "type": "validate", "label": "Validate contract", "retries": 1, "config": {"required": ["order_id", "supplier", "amount", "currency", "contact_email"]}},
+      {"id": "high_value", "type": "condition", "label": "High-value order?", "config": {"field": "amount", "op": "gte", "value": 5000}},
+      {"id": "notify", "type": "notify", "label": "Flag for finance review", "config": {"channel": "finance", "message": "High-value vendor order requires approval"}},
+      {"id": "persist", "type": "json_store", "label": "Persist payload", "config": {"filename": "vendor-order-latest.json"}}
+    ],
+    "edges": [
+      {"source": "trigger", "target": "normalize"},
+      {"source": "normalize", "target": "validate"},
+      {"source": "validate", "target": "high_value"},
+      {"source": "high_value", "target": "notify", "when": true},
+      {"source": "notify", "target": "persist"}
+    ]
+  }
+}

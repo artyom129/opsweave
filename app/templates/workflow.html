@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — {{ workflow.name }}{% endblock %}
+{% block eyebrow %}Workflow #{{ workflow.id }}{% endblock %}
+{% block content %}
+<div class="page-title split"><div><span class="kicker">{{ workflow.trigger_type|upper }} WORKFLOW</span><h1>{{ workflow.name }}</h1><p>{{ workflow.description }}</p></div><form method="post" action="/ui/workflows/{{ workflow.id }}/run"><button class="primary-btn">Run demo payload</button></form></div>
+<section class="panel graph-panel">
+  <div class="panel-head"><div><span class="kicker">VISUAL DAG</span><h2>Execution graph</h2></div><span class="pill ok">{{ workflow.definition.nodes|length }} nodes</span></div>
+  <div class="dag" id="dag">
+  {% for node in workflow.definition.nodes %}
+    <div class="dag-node" data-id="{{ node.id }}"><span class="node-type">{{ node.type }}</span><strong>{{ node.label }}</strong><small>retries {{ node.retries }}</small></div>
+    {% if not loop.last %}<span class="dag-arrow">→</span>{% endif %}
+  {% endfor %}
+  </div>
+</section>
+<div class="grid-two">
+<section class="panel"><div class="panel-head"><div><span class="kicker">CONFIGURATION</span><h2>Trigger</h2></div></div><dl class="detail-list"><div><dt>Type</dt><dd>{{ workflow.trigger_type }}</dd></div><div><dt>Webhook</dt><dd>{{ workflow.webhook_slug or '—' }}</dd></div><div><dt>Schedule</dt><dd>{{ workflow.schedule_seconds or '—' }}</dd></div><div><dt>Updated</dt><dd>{{ workflow.updated_at[:19].replace('T',' ') }}</dd></div></dl></section>
+<section class="panel"><div class="panel-head"><div><span class="kicker">HISTORY</span><h2>Recent runs</h2></div></div>{% for r in runs %}<a class="run-row" href="/runs/{{ r.id }}"><span class="status-icon {{ r.status }}"></span><span class="grow"><strong>Run #{{ r.id }}</strong><small>{{ r.started_at[:19].replace('T',' ') }}</small></span><span class="pill">{{ r.status }}</span></a>{% else %}<div class="empty">No runs yet.</div>{% endfor %}</section>
+</div>
+{% endblock %}

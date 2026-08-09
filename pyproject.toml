@@ -1,0 +1,9 @@
+[project]
+name = "opsweave"
+version = "1.0.0"
+description = "Local-first workflow orchestration and reliability platform"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — Dead Letters{% endblock %}
+{% block eyebrow %}Recovery queue{% endblock %}
+{% block content %}
+<div class="page-title"><div><span class="kicker">FAULT TOLERANCE</span><h1>Dead-letter queue</h1><p>Failed payloads are retained for forensic review and safe replay.</p></div></div>
+<section class="panel"><div class="panel-head"><div><span class="kicker">FAILED EXECUTIONS</span><h2>Recovery backlog</h2></div></div>{% for item in items %}<div class="dead-row"><span class="status-icon failed"></span><span class="grow"><strong>#{{ item.run_id }} · {{ item.workflow_name }}</strong><small>{{ item.reason }}</small></span><span class="pill">{{ 'replayed' if item.resolved_at else 'open' }}</span></div>{% else %}<div class="empty success-empty">No dead letters. The recovery queue is clean.</div>{% endfor %}</section>
+{% endblock %}

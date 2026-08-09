@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — Overview{% endblock %}
+{% block content %}
+<div class="hero">
+  <div>
+    <span class="kicker">EVENT-DRIVEN AUTOMATION</span>
+    <h1>See every workflow.<br>Trust every run.</h1>
+    <p>Orchestrate API and data workflows with retries, branching, live execution telemetry, encrypted secrets and dead-letter replay.</p>
+  </div>
+  <div class="hero-orbit">
+    <div class="orb orb-a">API</div><div class="orb orb-b">CSV</div><div class="orb orb-c">DB</div><div class="orb orb-core">OW</div>
+  </div>
+</div>
+<div class="stat-grid">
+  <div class="stat-card"><span>Success rate</span><strong>{{ stats.success_rate }}%</strong><small>{{ stats.successful_runs }} successful runs</small></div>
+  <div class="stat-card"><span>Active workflows</span><strong>{{ stats.active_workflows }}</strong><small>ready for triggers</small></div>
+  <div class="stat-card"><span>Failed runs</span><strong>{{ stats.failed_runs }}</strong><small>dead-letter protected</small></div>
+  <div class="stat-card"><span>Avg. step latency</span><strong>{{ stats.avg_step_ms }}ms</strong><small>across successful steps</small></div>
+</div>
+<div class="grid-two">
+  <section class="panel">
+    <div class="panel-head"><div><span class="kicker">WORKFLOWS</span><h2>Control plane</h2></div><a href="/workflows">View all →</a></div>
+    <div class="workflow-list">
+      {% for w in workflows %}
+      <a class="workflow-row" href="/workflows/{{ w.id }}"><span class="workflow-icon">{{ w.name[:2]|upper }}</span><span class="grow"><strong>{{ w.name }}</strong><small>{{ w.trigger_type }} · {{ w.definition.nodes|length }} nodes</small></span><span class="pill {{ 'ok' if w.is_enabled else '' }}">{{ 'enabled' if w.is_enabled else 'paused' }}</span></a>
+      {% else %}<div class="empty">No workflows yet. Run the demo seed script.</div>{% endfor %}
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><span class="kicker">RECENT EXECUTIONS</span><h2>Run stream</h2></div></div>
+    <div class="run-list">
+      {% for r in runs %}
+      <a class="run-row" href="/runs/{{ r.id }}"><span class="status-icon {{ r.status }}"></span><span class="grow"><strong>#{{ r.id }} · {{ r.workflow_name }}</strong><small>{{ r.trigger_type }} · {{ r.started_at[:19].replace('T',' ') }}</small></span><span class="pill">{{ r.status }}</span></a>
+      {% else %}<div class="empty">No executions yet.</div>{% endfor %}
+    </div>
+  </section>
+</div>
+<section class="panel architecture-panel">
+  <div class="panel-head"><div><span class="kicker">RUNTIME</span><h2>Execution architecture</h2></div><span class="badge">observable by default</span></div>
+  <div class="arch-flow"><div>Trigger<small>manual · webhook · schedule</small></div><span>→</span><div>Workflow DAG<small>branch · retry · validate</small></div><span>→</span><div>Step telemetry<small>hash · latency · output</small></div><span>→</span><div>Recovery<small>dead-letter · replay</small></div></div>
+</section>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}OpsWeave — Workflows{% endblock %}
+{% block eyebrow %}Workflow registry{% endblock %}
+{% block content %}
+<div class="page-title"><div><span class="kicker">AUTOMATION GRAPH</span><h1>Workflows</h1><p>Versioned execution graphs for API, validation and data operations.</p></div></div>
+<div class="card-grid">
+{% for w in workflows %}
+<a class="workflow-card" href="/workflows/{{ w.id }}">
+  <div class="card-top"><span class="workflow-icon large">{{ w.name[:2]|upper }}</span><span class="pill {{ 'ok' if w.is_enabled else '' }}">{{ 'enabled' if w.is_enabled else 'paused' }}</span></div>
+  <h3>{{ w.name }}</h3><p>{{ w.description }}</p>
+  <div class="metrics"><span><strong>{{ w.definition.nodes|length }}</strong> nodes</span><span><strong>{{ w.definition.edges|length }}</strong> edges</span><span><strong>{{ w.trigger_type }}</strong> trigger</span></div>
+</a>
+{% endfor %}
+</div>
+{% endblock %}
