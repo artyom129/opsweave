@@ -1,11 +1,3 @@
-<a id="english"></a>
-
-<div align="center">
-
-**🇬🇧 English** · [🇷🇺 Русский](#russian)
-
-</div>
-
 # OpsWeave
 
 **Local-first workflow orchestration and reliability platform for API, data and business automation.**
@@ -190,44 +182,3 @@ tests/              automated tests
 ## Why this project exists
 
 A lot of automation work starts as a Python script and later needs reliability: schedules, retry behavior, observability, secrets, audit history and a way to replay failures. OpsWeave demonstrates that complete path in one self-contained project.
-
----
-
-<a id="russian"></a>
-
-<div align="center">
-
-[🇬🇧 English](#english) · **🇷🇺 Русский**
-
-</div>
-
-# OpsWeave — Русская версия
-
-OpsWeave — локальная платформа оркестрации автоматизаций и data/API-процессов.
-
-Это не одиночный Python-скрипт, а небольшой control plane: workflow-графы, webhook и scheduled triggers, retry, branching, история каждого шага, WebSocket-события, encrypted secrets, dead-letter queue и replay неудачных запусков.
-
-## Что демонстрирует проект
-
-- FastAPI backend и REST API
-- движок исполнения DAG
-- условные ветки
-- retries и recovery
-- SQLite + audit log
-- encrypted secret vault
-- live execution telemetry
-- web dashboard
-- webhook integrations
-- scheduled jobs
-- Docker
-- pytest и GitHub Actions
-
-Быстрый запуск:
-
-```bash
-pip install -r requirements.txt
-python scripts/seed_demo.py
-uvicorn app.main:app --reload
-```
-
-После запуска открой `http://127.0.0.1:8000`.
