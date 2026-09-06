@@ -1,3 +1,5 @@
+**English** | [Русский](README_RU.md)
+
 # OpsWeave
 
 **Local-first workflow orchestration and reliability platform for API, data and business automation.**
