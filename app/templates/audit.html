@@ -1,7 +1,20 @@
 {% extends "base.html" %}
-{% block title %}OpsWeave — Audit Log{% endblock %}
-{% block eyebrow %}Immutable activity trail{% endblock %}
+{% set section = 'audit' %}
+{% block title %}Audit log · OpsWeave{% endblock %}
+{% block crumbs %}Audit log{% endblock %}
 {% block content %}
-<div class="page-title"><div><span class="kicker">AUDIT TRAIL</span><h1>Operational history</h1><p>Workflow changes, queued executions, secret updates and recovery events in one searchable trail.</p></div></div>
-<section class="panel"><div class="panel-head"><div><span class="kicker">LATEST EVENTS</span><h2>Audit stream</h2></div></div>{% for item in items %}<div class="dead-row"><span class="status-icon succeeded"></span><span class="grow"><strong>{{ item.action }}</strong><small>{{ item.entity_type }} · {{ item.entity_id or '—' }} · {{ item.created_at[:19].replace('T',' ') }}</small></span><code>{{ item.details | tojson }}</code></div>{% else %}<div class="empty">No audit events yet.</div>{% endfor %}</section>
+<div class="page-head">
+  <div>
+    <h1>Audit log</h1>
+    <p>Workflow changes, queued runs, secret updates and recoveries, newest first</p>
+  </div>
+</div>
+<section class="panel">
+  <div class="panel-head"><h2>Latest {{ items | length }} events</h2></div>
+  <div class="list">
+    {% for item in items %}
+    <div class="row wide"><span class="dot"></span><span><span class="title">{{ item.action }}</span><span class="sub">{{ item.entity_type }} {{ item.entity_id or '' }} · {{ item.created_at[:19].replace('T', ' ') }}</span></span><span class="end" title="{{ item.details | tojson }}">{{ item.details | tojson }}</span></div>
+    {% else %}<div class="empty">No events yet</div>{% endfor %}
+  </div>
+</section>
 {% endblock %}

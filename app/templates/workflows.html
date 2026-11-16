@@ -1,15 +1,25 @@
 {% extends "base.html" %}
-{% block title %}OpsWeave — Workflows{% endblock %}
-{% block eyebrow %}Workflow registry{% endblock %}
+{% from "_icons.html" import icon %}
+{% set section = 'workflows' %}
+{% block title %}Workflows · OpsWeave{% endblock %}
+{% block crumbs %}Workflows{% endblock %}
 {% block content %}
-<div class="page-title"><div><span class="kicker">AUTOMATION GRAPH</span><h1>Workflows</h1><p>Versioned execution graphs for API, validation and data operations.</p></div></div>
-<div class="card-grid">
+<div class="page-head">
+  <div>
+    <h1>Workflows</h1>
+    <p>Step graphs for API calls, validation and data handling. Create and change them through the API</p>
+  </div>
+</div>
+<div class="cards">
 {% for w in workflows %}
-<a class="workflow-card" href="/workflows/{{ w.id }}">
-  <div class="card-top"><span class="workflow-icon large">{{ w.name[:2]|upper }}</span><span class="pill {{ 'ok' if w.is_enabled else '' }}">{{ 'enabled' if w.is_enabled else 'paused' }}</span></div>
-  <h3>{{ w.name }}</h3><p>{{ w.description }}</p>
-  <div class="metrics"><span><strong>{{ w.definition.nodes|length }}</strong> nodes</span><span><strong>{{ w.definition.edges|length }}</strong> edges</span><span><strong>{{ w.trigger_type }}</strong> trigger</span></div>
+<a class="card" href="/workflows/{{ w.id }}">
+  <div class="card-top"><span class="state">{{ icon(w.trigger_type) }}{{ w.trigger_type|capitalize }}</span><span class="state"><span class="dot {{ 'enabled' if w.is_enabled else 'paused' }}"></span>{{ 'Enabled' if w.is_enabled else 'Paused' }}</span></div>
+  <h3>{{ w.name }}</h3>
+  <p>{{ w.description or 'No description' }}</p>
+  <div class="facts"><span><b>{{ w.definition.nodes|length }}</b> steps</span><span><b>{{ w.definition.edges|length }}</b> links</span>{% if w.webhook_slug %}<span>/{{ w.webhook_slug }}</span>{% elif w.schedule_seconds %}<span>every {{ w.schedule_seconds }}s</span>{% endif %}</div>
 </a>
+{% else %}
+<div class="panel empty">No workflows yet. Create one with <code>POST /api/workflows</code></div>
 {% endfor %}
 </div>
 {% endblock %}

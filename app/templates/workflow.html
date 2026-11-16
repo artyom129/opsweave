@@ -1,19 +1,103 @@
 {% extends "base.html" %}
-{% block title %}OpsWeave — {{ workflow.name }}{% endblock %}
-{% block eyebrow %}Workflow #{{ workflow.id }}{% endblock %}
+{% from "_icons.html" import icon %}
+{% set section = 'workflows' %}
+{% block title %}{{ workflow.name }} · OpsWeave{% endblock %}
+{% block crumbs %}<a href="/workflows">Workflows</a><span class="sep">/</span><span>{{ workflow.name }}</span>{% endblock %}
 {% block content %}
-<div class="page-title split"><div><span class="kicker">{{ workflow.trigger_type|upper }} WORKFLOW</span><h1>{{ workflow.name }}</h1><p>{{ workflow.description }}</p></div><form method="post" action="/ui/workflows/{{ workflow.id }}/run"><button class="primary-btn">Run demo payload</button></form></div>
-<section class="panel graph-panel">
-  <div class="panel-head"><div><span class="kicker">VISUAL DAG</span><h2>Execution graph</h2></div><span class="pill ok">{{ workflow.definition.nodes|length }} nodes</span></div>
-  <div class="dag" id="dag">
-  {% for node in workflow.definition.nodes %}
-    <div class="dag-node" data-id="{{ node.id }}"><span class="node-type">{{ node.type }}</span><strong>{{ node.label }}</strong><small>retries {{ node.retries }}</small></div>
-    {% if not loop.last %}<span class="dag-arrow">→</span>{% endif %}
-  {% endfor %}
+<div class="page-head">
+  <div>
+    <h1>{{ workflow.name }}</h1>
+    <p>{{ workflow.description }}</p>
+    <div class="meta">{{ workflow.trigger_type }}{% if workflow.webhook_slug %} · POST /api/webhooks/{{ workflow.webhook_slug }}{% endif %}{% if workflow.schedule_seconds %} · every {{ workflow.schedule_seconds }}s{% endif %} · {{ 'enabled' if workflow.is_enabled else 'paused' }}</div>
   </div>
-</section>
-<div class="grid-two">
-<section class="panel"><div class="panel-head"><div><span class="kicker">CONFIGURATION</span><h2>Trigger</h2></div></div><dl class="detail-list"><div><dt>Type</dt><dd>{{ workflow.trigger_type }}</dd></div><div><dt>Webhook</dt><dd>{{ workflow.webhook_slug or '—' }}</dd></div><div><dt>Schedule</dt><dd>{{ workflow.schedule_seconds or '—' }}</dd></div><div><dt>Updated</dt><dd>{{ workflow.updated_at[:19].replace('T',' ') }}</dd></div></dl></section>
-<section class="panel"><div class="panel-head"><div><span class="kicker">HISTORY</span><h2>Recent runs</h2></div></div>{% for r in runs %}<a class="run-row" href="/runs/{{ r.id }}"><span class="status-icon {{ r.status }}"></span><span class="grow"><strong>Run #{{ r.id }}</strong><small>{{ r.started_at[:19].replace('T',' ') }}</small></span><span class="pill">{{ r.status }}</span></a>{% else %}<div class="empty">No runs yet.</div>{% endfor %}</section>
+  <form method="post" action="/ui/workflows/{{ workflow.id }}/run"><button class="btn btn-primary">{{ icon('play') }}Run with demo payload</button></form>
 </div>
+
+<div class="stack">
+  <section class="panel graph-panel">
+    <div class="panel-head">
+      <h2>Graph</h2>
+      <span class="aside">{% if last_run %}Path of <a href="/runs/{{ last_run.id }}">run {{ last_run.id }}</a>, {{ last_run.status }}{% else %}No runs yet{% endif %}</span>
+    </div>
+    <div class="graph-scroll">
+      <div class="graph" id="graph" style="--cols: {{ graph.columns | length }}">
+        <svg class="threads" id="threads" aria-hidden="true"></svg>
+        {% for column in graph.columns %}
+        <div class="graph-col">
+          {% for node in column %}
+          <div class="node {{ step_status.get(node.id, '') }}" data-id="{{ node.id }}">
+            <div class="type"><span>{{ node.type }}</span>{% if step_status.get(node.id) and step_status[node.id] != 'succeeded' %}<span class="status {{ step_status[node.id] }}">{{ step_status[node.id] }}</span>{% endif %}</div>
+            <strong>{{ node.label }}</strong>
+            {% if node.retries %}<div class="retry">Retries {{ node.retries }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="grid-two">
+    <section class="panel">
+      <div class="panel-head"><h2>Trigger</h2></div>
+      <dl class="detail">
+        <div><dt>Type</dt><dd>{{ workflow.trigger_type }}</dd></div>
+        <div><dt>Webhook</dt><dd>{{ ('/api/webhooks/' ~ workflow.webhook_slug) if workflow.webhook_slug else '—' }}</dd></div>
+        <div><dt>Interval</dt><dd>{{ (workflow.schedule_seconds ~ ' s') if workflow.schedule_seconds else '—' }}</dd></div>
+        <div><dt>Updated</dt><dd>{{ workflow.updated_at[:16].replace('T', ' ') }}</dd></div>
+      </dl>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Recent runs</h2></div>
+      <div class="list">
+        {% for r in runs %}
+        <a class="row" href="/runs/{{ r.id }}"><span class="dot {{ r.status }}"></span><span><span class="title">Run {{ r.id }}</span><span class="sub">{{ r.trigger_type }} · {{ r.started_at[:16].replace('T', ' ') }}</span></span><span class="status {{ r.status }}">{{ r.status }}</span></a>
+        {% else %}<div class="empty">No runs yet</div>{% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const edges = {{ graph.edges | tojson }};
+  const status = {{ step_status | tojson }};
+  const graph = document.getElementById('graph');
+  const svg = document.getElementById('threads');
+  const ns = 'http://www.w3.org/2000/svg';
+  function draw() {
+    const box = graph.getBoundingClientRect();
+    svg.setAttribute('width', box.width);
+    svg.setAttribute('height', box.height);
+    svg.replaceChildren();
+    for (const edge of edges) {
+      const a = graph.querySelector('[data-id="' + CSS.escape(edge.source) + '"]');
+      const b = graph.querySelector('[data-id="' + CSS.escape(edge.target) + '"]');
+      if (!a || !b) continue;
+      const ra = a.getBoundingClientRect();
+      const rb = b.getBoundingClientRect();
+      const x1 = ra.right - box.left, y1 = ra.top + ra.height / 2 - box.top;
+      const x2 = rb.left - box.left, y2 = rb.top + rb.height / 2 - box.top;
+      const mid = (x1 + x2) / 2;
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', 'M' + x1 + ',' + y1 + ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2);
+      const taken = status[edge.source] === 'succeeded' && ['succeeded', 'failed', 'running'].includes(status[edge.target]);
+      const idle = status[edge.target] === 'skipped';
+      path.setAttribute('class', taken ? 'taken' : (idle ? 'idle' : ''));
+      svg.appendChild(path);
+      if (edge.when !== null && edge.when !== undefined) {
+        const label = document.createElementNS(ns, 'text');
+        label.setAttribute('x', x1 + 4);
+        label.setAttribute('y', y2 < y1 ? y1 - 8 : y1 + 18);
+        label.textContent = edge.when ? 'yes' : 'no';
+        svg.appendChild(label);
+      }
+    }
+  }
+  draw();
+  new ResizeObserver(draw).observe(graph);
+  if (document.fonts) document.fonts.ready.then(draw);
+})();
+</script>
 {% endblock %}

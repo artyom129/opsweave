@@ -1,7 +1,20 @@
 {% extends "base.html" %}
-{% block title %}OpsWeave — Dead Letters{% endblock %}
-{% block eyebrow %}Recovery queue{% endblock %}
+{% set section = 'dead' %}
+{% block title %}Dead letters · OpsWeave{% endblock %}
+{% block crumbs %}Dead letters{% endblock %}
 {% block content %}
-<div class="page-title"><div><span class="kicker">FAULT TOLERANCE</span><h1>Dead-letter queue</h1><p>Failed payloads are retained for forensic review and safe replay.</p></div></div>
-<section class="panel"><div class="panel-head"><div><span class="kicker">FAILED EXECUTIONS</span><h2>Recovery backlog</h2></div></div>{% for item in items %}<div class="dead-row"><span class="status-icon failed"></span><span class="grow"><strong>#{{ item.run_id }} · {{ item.workflow_name }}</strong><small>{{ item.reason }}</small></span><span class="pill">{{ 'replayed' if item.resolved_at else 'open' }}</span></div>{% else %}<div class="empty success-empty">No dead letters. The recovery queue is clean.</div>{% endfor %}</section>
+<div class="page-head">
+  <div>
+    <h1>Dead letters</h1>
+    <p>Payloads of failed runs, kept as they arrived so they can be inspected and replayed once</p>
+  </div>
+</div>
+<section class="panel">
+  <div class="panel-head"><h2>Failed runs</h2><span class="aside">{{ items | selectattr('resolved_at', 'none') | list | length }} open</span></div>
+  <div class="list">
+    {% for item in items %}
+    <a class="row wide" href="/runs/{{ item.run_id }}"><span class="dot {{ 'replayed' if item.resolved_at else 'failed' }}"></span><span><span class="title">{{ item.workflow_name }}</span><span class="sub">Run {{ item.run_id }} · {{ item.created_at[:16].replace('T', ' ') }}{% if item.replayed_run_id %} · replayed as run {{ item.replayed_run_id }}{% endif %}</span></span><span class="end" title="{{ item.reason }}">{{ item.reason }}</span></a>
+    {% else %}<div class="empty">No failed runs waiting</div>{% endfor %}
+  </div>
+</section>
 {% endblock %}

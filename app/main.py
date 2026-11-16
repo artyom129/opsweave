@@ -212,9 +212,54 @@ def audit_logs(limit: int = 100) -> list[dict[str, Any]]:
     return REPO.list_audit_logs(max(1, min(limit, 500)))
 
 
+WEAVE_COLUMNS = 24
+
+
+def run_weave(workflows: list[dict[str, Any]], runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows of the overview weave: each workflow with its latest runs, oldest first."""
+    by_workflow: dict[int, list[dict[str, Any]]] = {}
+    for run in runs:  # newest first
+        bucket = by_workflow.setdefault(run["workflow_id"], [])
+        if len(bucket) < WEAVE_COLUMNS:
+            bucket.append(run)
+    rows = []
+    for workflow in workflows:
+        recent = list(reversed(by_workflow.get(workflow["id"], [])))
+        cells: list[dict[str, Any] | None] = [None] * (WEAVE_COLUMNS - len(recent)) + recent  # type: ignore[list-item]
+        rows.append({"workflow": workflow, "cells": cells, "count": len(recent)})
+    return rows
+
+
+def graph_layout(definition: dict[str, Any]) -> dict[str, Any]:
+    """Place nodes in columns by their longest distance from a start node."""
+    nodes = definition.get("nodes", [])
+    edges = definition.get("edges", [])
+    depth = {node["id"]: 0 for node in nodes}
+    for _ in range(len(nodes)):
+        changed = False
+        for edge in edges:
+            if edge["source"] in depth and edge["target"] in depth and depth[edge["target"]] < depth[edge["source"]] + 1:
+                depth[edge["target"]] = depth[edge["source"]] + 1
+                changed = True
+        if not changed:
+            break
+    columns: list[list[dict[str, Any]]] = [[] for _ in range(max(depth.values(), default=-1) + 1)]
+    for node in nodes:
+        columns[depth[node["id"]]].append(node)
+    return {"columns": columns, "edges": edges}
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "dashboard.html", {"stats": REPO.stats(), "workflows": REPO.list_workflows()[:5], "runs": REPO.list_runs(10)})
+    workflows = REPO.list_workflows()
+    runs = REPO.list_runs(500)
+    return TEMPLATES.TemplateResponse(request, "dashboard.html", {
+        "stats": REPO.stats(),
+        "workflows": workflows[:5],
+        "runs": runs[:6],
+        "weave": run_weave(workflows[:8], runs),
+        "weave_columns": WEAVE_COLUMNS,
+    })
 
 
 @app.get("/workflows", response_class=HTMLResponse)
@@ -228,7 +273,18 @@ def workflow_page(request: Request, workflow_id: int) -> HTMLResponse:
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     runs = [run for run in REPO.list_runs(100) if run["workflow_id"] == workflow_id][:20]
-    return TEMPLATES.TemplateResponse(request, "workflow.html", {"workflow": workflow, "runs": runs})
+    last_run = REPO.get_run(runs[0]["id"]) if runs else None
+    step_status: dict[str, str] = {}
+    if last_run:
+        for step in last_run["steps"]:
+            step_status[step["node_id"]] = step["status"]  # the final attempt wins
+    return TEMPLATES.TemplateResponse(request, "workflow.html", {
+        "workflow": workflow,
+        "runs": runs,
+        "graph": graph_layout(workflow["definition"]),
+        "last_run": last_run,
+        "step_status": step_status,
+    })
 
 
 @app.post("/ui/workflows/{workflow_id}/run")
