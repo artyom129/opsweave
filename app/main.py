@@ -38,6 +38,7 @@ async def require_write_key(x_opsweave_key: str | None = Header(default=None)) -
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    REPO.recover_interrupted_runs()
     SCHEDULER.start()
     yield
     await SCHEDULER.stop()
@@ -85,7 +86,10 @@ def get_workflow(workflow_id: int) -> dict[str, Any]:
 
 @app.patch("/api/workflows/{workflow_id}", dependencies=[Depends(require_write_key)])
 def patch_workflow(workflow_id: int, patch: WorkflowPatch) -> dict[str, Any]:
-    workflow = REPO.update_workflow(workflow_id, patch)
+    try:
+        workflow = REPO.update_workflow(workflow_id, patch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return workflow
@@ -124,7 +128,7 @@ async def webhook(slug: str, payload: dict[str, Any], x_idempotency_key: str | N
 
 @app.get("/api/runs")
 def list_runs(limit: int = 100) -> list[dict[str, Any]]:
-    return REPO.list_runs(min(limit, 500))
+    return REPO.list_runs(max(1, min(limit, 500)))
 
 
 @app.get("/api/runs/{run_id}")
@@ -158,8 +162,9 @@ async def replay_dead_letter(dead_letter_id: int) -> dict[str, Any]:
     run = REPO.get_run(item["run_id"])
     if not run:
         raise HTTPException(status_code=404, detail="Original run not found")
-    new_run_id = REPO.create_run(run["workflow_id"], "dead-letter-replay", item["payload"])
-    REPO.resolve_dead_letter(dead_letter_id, new_run_id)
+    new_run_id = REPO.replay_dead_letter(dead_letter_id, run["workflow_id"], item["payload"])
+    if new_run_id is None:
+        raise HTTPException(status_code=409, detail=f"Dead letter was already replayed as run {item['replayed_run_id']}")
     ENGINE.enqueue(new_run_id)
     return {"run_id": new_run_id}
 
@@ -204,17 +209,17 @@ async def run_events(websocket: WebSocket, run_id: int) -> None:
 
 @app.get("/api/audit")
 def audit_logs(limit: int = 100) -> list[dict[str, Any]]:
-    return REPO.list_audit_logs(min(limit, 500))
+    return REPO.list_audit_logs(max(1, min(limit, 500)))
 
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse("dashboard.html", {"request": request, "stats": REPO.stats(), "workflows": REPO.list_workflows()[:5], "runs": REPO.list_runs(10)})
+    return TEMPLATES.TemplateResponse(request, "dashboard.html", {"stats": REPO.stats(), "workflows": REPO.list_workflows()[:5], "runs": REPO.list_runs(10)})
 
 
 @app.get("/workflows", response_class=HTMLResponse)
 def workflows_page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse("workflows.html", {"request": request, "workflows": REPO.list_workflows()})
+    return TEMPLATES.TemplateResponse(request, "workflows.html", {"workflows": REPO.list_workflows()})
 
 
 @app.get("/workflows/{workflow_id}", response_class=HTMLResponse)
@@ -223,7 +228,7 @@ def workflow_page(request: Request, workflow_id: int) -> HTMLResponse:
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     runs = [run for run in REPO.list_runs(100) if run["workflow_id"] == workflow_id][:20]
-    return TEMPLATES.TemplateResponse("workflow.html", {"request": request, "workflow": workflow, "runs": runs})
+    return TEMPLATES.TemplateResponse(request, "workflow.html", {"workflow": workflow, "runs": runs})
 
 
 @app.post("/ui/workflows/{workflow_id}/run")
@@ -242,19 +247,19 @@ def run_page(request: Request, run_id: int) -> HTMLResponse:
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     workflow = REPO.get_workflow(run["workflow_id"])
-    return TEMPLATES.TemplateResponse("run.html", {"request": request, "run": run, "workflow": workflow})
+    return TEMPLATES.TemplateResponse(request, "run.html", {"run": run, "workflow": workflow})
 
 
 @app.get("/dead-letters", response_class=HTMLResponse)
 def dead_letters_page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse("dead_letters.html", {"request": request, "items": REPO.list_dead_letters()})
+    return TEMPLATES.TemplateResponse(request, "dead_letters.html", {"items": REPO.list_dead_letters()})
 
 
 @app.get("/audit", response_class=HTMLResponse)
 def audit_page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse("audit.html", {"request": request, "items": REPO.list_audit_logs(200)})
+    return TEMPLATES.TemplateResponse(request, "audit.html", {"items": REPO.list_audit_logs(200)})
 
 
 @app.get("/secrets", response_class=HTMLResponse)
 def secrets_page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse("secrets.html", {"request": request, "secrets": REPO.list_secrets()})
+    return TEMPLATES.TemplateResponse(request, "secrets.html", {"secrets": REPO.list_secrets()})

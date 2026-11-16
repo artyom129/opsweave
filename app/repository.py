@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from .db import Database, utcnow
-from .models import WorkflowCreate, WorkflowPatch
+from .models import WorkflowCreate, WorkflowPatch, check_trigger
 
 
 class Repository:
@@ -38,8 +38,17 @@ class Repository:
             item[target] = json.loads(raw) if raw else None
         return item
 
+    def _slug_taken(self, slug: str | None, exclude_id: int | None = None) -> bool:
+        if not slug:
+            return False
+        row = self.db.fetchone("SELECT id FROM workflows WHERE webhook_slug=?", (slug,))
+        return bool(row) and row["id"] != exclude_id
+
     def create_workflow(self, data: WorkflowCreate) -> dict[str, Any]:
         data.definition.validate_graph()
+        check_trigger(data.trigger_type, data.webhook_slug, data.schedule_seconds)
+        if self._slug_taken(data.webhook_slug):
+            raise ValueError(f"Webhook slug '{data.webhook_slug}' is already used by another workflow")
         now = utcnow()
         workflow_id = self.db.execute(
             """INSERT INTO workflows(name, description, trigger_type, webhook_slug, schedule_seconds,
@@ -64,10 +73,20 @@ class Repository:
         if not current:
             return None
         values = patch.model_dump(exclude_unset=True)
-        if "definition" in values and patch.definition is not None:
+        values.pop("definition", None)
+        if patch.definition is not None:
             patch.definition.validate_graph()
             values["definition_json"] = patch.definition.model_dump_json()
-            values.pop("definition")
+        for required in ("name", "trigger_type", "is_enabled"):
+            if required in values and values[required] is None:
+                values.pop(required)
+        check_trigger(
+            values.get("trigger_type", current["trigger_type"]),
+            values.get("webhook_slug", current["webhook_slug"]),
+            values.get("schedule_seconds", current["schedule_seconds"]),
+        )
+        if self._slug_taken(values.get("webhook_slug"), exclude_id=workflow_id):
+            raise ValueError(f"Webhook slug '{values['webhook_slug']}' is already used by another workflow")
         if "is_enabled" in values:
             values["is_enabled"] = 1 if values["is_enabled"] else 0
         if not values:
@@ -163,6 +182,45 @@ class Repository:
             "UPDATE dead_letters SET replayed_run_id=?, resolved_at=? WHERE id=?",
             (replayed_run_id, utcnow(), dead_letter_id),
         )
+
+    def replay_dead_letter(self, dead_letter_id: int, workflow_id: int, payload: dict[str, Any]) -> int | None:
+        """Create the replay run and resolve the dead letter in one transaction.
+
+        Returns None when the dead letter was already replayed, so a double
+        click or a retried request cannot start the same work twice.
+        """
+        now = utcnow()
+        with self.db.conn() as con:
+            claimed = con.execute(
+                "UPDATE dead_letters SET resolved_at=? WHERE id=? AND resolved_at IS NULL",
+                (now, dead_letter_id),
+            ).rowcount
+            if not claimed:
+                return None
+            run_id = int(con.execute(
+                "INSERT INTO runs(workflow_id,status,trigger_type,input_json,started_at) VALUES(?,?,?,?,?)",
+                (workflow_id, "queued", "dead-letter-replay", json.dumps(payload), now),
+            ).lastrowid)
+            con.execute("UPDATE dead_letters SET replayed_run_id=? WHERE id=?", (run_id, dead_letter_id))
+        self.db.audit("run.queued", "run", run_id, {"workflow_id": workflow_id, "trigger_type": "dead-letter-replay"})
+        return run_id
+
+    def recover_interrupted_runs(self) -> list[int]:
+        """Fail runs that were queued or running when the process stopped.
+
+        Their asyncio tasks died with the process, so nothing would ever finish
+        them. They go to the dead-letter queue and can be replayed from there.
+        """
+        rows = self.db.fetchall("SELECT id, input_json FROM runs WHERE status IN ('queued','running')")
+        reason = "Interrupted: the service stopped before this run finished"
+        for row in rows:
+            self.set_run_status(row["id"], "failed", error=reason)
+            self.db.execute(
+                "UPDATE step_runs SET status='failed', error=?, finished_at=? WHERE run_id=? AND status='running'",
+                (reason, utcnow(), row["id"]),
+            )
+            self.create_dead_letter(row["id"], reason, json.loads(row["input_json"]) if row["input_json"] else {})
+        return [row["id"] for row in rows]
 
     def get_dead_letter(self, dead_letter_id: int) -> dict[str, Any] | None:
         row = self.db.fetchone("SELECT * FROM dead_letters WHERE id=?", (dead_letter_id,))

@@ -117,9 +117,14 @@ class Database:
         with self._lock:
             connection = sqlite3.connect(self.path, check_same_thread=False)
             connection.row_factory = sqlite3.Row
+            # The pragma is per connection; without it ON DELETE CASCADE does nothing.
+            connection.execute("PRAGMA foreign_keys=ON")
             try:
                 yield connection
                 connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
             finally:
                 connection.close()
 

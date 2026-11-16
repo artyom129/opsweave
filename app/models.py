@@ -44,6 +44,29 @@ class WorkflowDefinition(BaseModel):
         for edge in self.edges:
             if edge.source not in known or edge.target not in known:
                 raise ValueError(f"Unknown node in edge: {edge.source}->{edge.target}")
+        indegree = {node_id: 0 for node_id in ids}
+        adjacency: dict[str, list[str]] = {node_id: [] for node_id in ids}
+        for edge in self.edges:
+            indegree[edge.target] += 1
+            adjacency[edge.source].append(edge.target)
+        queue = [node_id for node_id, degree in indegree.items() if degree == 0]
+        visited = 0
+        while queue:
+            current = queue.pop()
+            visited += 1
+            for target in adjacency[current]:
+                indegree[target] -= 1
+                if indegree[target] == 0:
+                    queue.append(target)
+        if visited != len(ids):
+            raise ValueError("Workflow graph contains a cycle")
+
+
+def check_trigger(trigger_type: str, webhook_slug: str | None, schedule_seconds: int | None) -> None:
+    if trigger_type == "webhook" and not webhook_slug:
+        raise ValueError("A webhook workflow needs webhook_slug")
+    if trigger_type == "schedule" and not schedule_seconds:
+        raise ValueError("A scheduled workflow needs schedule_seconds")
 
 
 class WorkflowCreate(BaseModel):

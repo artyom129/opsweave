@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from cryptography.fernet import InvalidToken
 
 from .crypto import SecretBox
 from .models import WorkflowDefinition, WorkflowNode
@@ -91,7 +92,16 @@ class WorkflowEngine:
         if not workflow:
             self.repo.set_run_status(run_id, "failed", error="Workflow not found")
             return
-        definition = WorkflowDefinition.model_validate(workflow["definition"])
+        try:
+            definition = WorkflowDefinition.model_validate(workflow["definition"])
+            definition.validate_graph()
+        except Exception as exc:
+            # Without this the run would stay "queued" forever.
+            message = f"Invalid workflow definition: {exc}"
+            self.repo.set_run_status(run_id, "failed", error=message)
+            self.repo.create_dead_letter(run_id, message, run["input"] or {})
+            await self.events.publish(run_id, {"type": "run.failed", "run_id": run_id, "error": message})
+            return
         self.repo.set_run_status(run_id, "running")
         await self.events.publish(run_id, {"type": "run.started", "run_id": run_id})
         try:
@@ -196,7 +206,12 @@ class WorkflowEngine:
                 ciphertext = self.repo.get_secret_ciphertext(name)
                 if not ciphertext:
                     raise WorkflowExecutionError(f"Secret {name} not found")
-                return self.secret_box.decrypt(ciphertext)
+                try:
+                    return self.secret_box.decrypt(ciphertext)
+                except InvalidToken as exc:
+                    raise WorkflowExecutionError(
+                        f"Secret {name} cannot be decrypted; OPSWEAVE_SECRET_KEY differs from the key it was stored with"
+                    ) from exc
             return pattern.sub(repl, value)
         if isinstance(value, dict):
             return {k: self._resolve_secret_refs(v) for k, v in value.items()}
