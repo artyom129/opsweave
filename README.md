@@ -1,66 +1,79 @@
+<div align="center">
+
 # OpsWeave
 
-**Local-first workflow orchestration and reliability platform for API, data and business automation.**
+**Workflow automation that records every step, retries what can be retried, and keeps what failed so you can replay it.**
 
-OpsWeave is a compact control plane for teams that need more than one-off scripts. It models automations as DAGs, runs them from manual, webhook or scheduled triggers, records every step, retries transient failures, stores failed payloads in a dead-letter queue, and exposes live execution telemetry through a web dashboard and REST API.
+[English](README.md) · [Русский](README.ru.md) · [Қазақша](README.kk.md)
 
-The project is designed to look and behave like a small production automation platform rather than a demo script.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-17%20passed-2E8B57)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-## Highlights
+</div>
 
-- Visual workflow DAGs with conditional branches
-- Manual, webhook and scheduled triggers
-- Retry policy with incremental backoff
-- Step-level timing, input/output hashes and execution history
-- Live run updates over WebSockets
-- Dead-letter queue with safe replay
-- Encrypted secret vault (`${SECRET:NAME}` references)
-- REST API and built-in OpenAPI docs
-- SQLite persistence with WAL mode and audit logs
-- JSON artifact persistence for downstream handoff
-- CSV export of run history
-- Responsive dark operations dashboard
-- Docker and docker-compose support
-- Automated test suite and GitHub Actions workflow
+<p align="center">
+  <img src="docs/screenshots/overview.png" alt="Overview: the last 24 runs of each workflow as a strip, success rate, recent runs" width="860">
+</p>
 
-## Architecture
+## What it is
+
+A lot of automation starts as a script and later needs reliability: schedules, retries, secrets, an audit trail and a way to replay failures. OpsWeave is that next step in one self-contained project.
+
+You describe an automation as a graph of steps. It runs from a manual click, a webhook or a schedule. Every step is recorded with its timing and a hash of its input and output. Transient failures are retried. A run that fails for good keeps its original payload in a dead-letter queue, so you can fix the data and replay it.
+
+| Piece | What it does |
+|---|---|
+| **Workflow graph** | Steps as a DAG with yes/no branches |
+| **Triggers** | Manual, webhook (with idempotency keys) and scheduled |
+| **Run history** | Every attempt of every step: latency, error, payload hashes |
+| **Dead letters** | Failed payloads kept for a one-time replay |
+| **Secret vault** | Encrypted values used as `${SECRET:NAME}` in node config |
+| **Live view** | WebSocket stream of a run while it executes |
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/workflow.png" alt="Workflow graph with the path of the latest run highlighted"><br><sub>A workflow graph. The path the latest run took is drawn in ochre, the skipped branch is dashed</sub></td>
+    <td width="50%"><img src="docs/screenshots/run.png" alt="Run page with one line of steps"><br><sub>A run: every step on one line with its attempts, latency and error</sub></td>
+  </tr>
+</table>
+
+## How a run goes
 
 ```mermaid
 flowchart LR
-    A[Manual / Webhook / Schedule] --> B[Workflow DAG]
-    B --> C[Node Runtime]
-    C --> D[Step Telemetry]
-    C --> E[Retry Engine]
+    A["Manual / Webhook / Schedule"] --> B["Workflow graph"]
+    B --> C["Node runtime"]
+    C --> D["Step telemetry"]
+    C --> E["Retry engine"]
     E --> C
-    C --> F[Outputs / HTTP / Storage]
-    C -->|terminal failure| G[Dead-letter Queue]
-    G -->|replay| B
-    H[Encrypted Secret Vault] --> C
-    D --> I[Dashboard + WebSocket Stream]
-    D --> J[SQLite Audit Store]
+    C --> F["Outputs, HTTP, storage"]
+    C -->|"terminal failure"| G["Dead-letter queue"]
+    G -->|"replay"| B
+    H["Secret vault"] --> C
+    D --> I["Dashboard and WebSocket stream"]
+    D --> J["SQLite audit store"]
 ```
 
-## Built-in node types
+## Node types
 
 | Node | Purpose |
 |---|---|
-| `trigger` | Entry point for a run |
-| `set` | Add static fields to the execution payload |
-| `transform` | Normalize, cast and map payload values |
-| `validate` | Required fields, regex, range and allowed-value rules |
-| `condition` | Route execution using boolean branch edges |
-| `http` | Call external JSON APIs with retry support |
-| `delay` | Pause a workflow step |
-| `notify` | Add operational notifications to run context |
-| `json_store` | Persist a normalized payload artifact |
+| `trigger` | Entry point of a run |
+| `set` | Add static fields to the payload |
+| `transform` | Normalize, cast and map values |
+| `validate` | Required fields, regex, ranges, allowed values |
+| `condition` | Route the run along yes/no edges |
+| `http` | Call an external JSON API |
+| `delay` | Pause a step |
+| `notify` | Attach an operational notification to the run |
+| `json_store` | Save the payload as a JSON artifact for the next system |
 
-## Demo workflows
-
-`python scripts/seed_demo.py` creates three realistic workflows:
-
-1. **Vendor Order Intake Guard** — webhook intake, normalization, contract validation, high-value branching and persistence.
-2. **Nightly Data Quality Gate** — scheduled health snapshot with freshness SLA validation.
-3. **API Sync Reliability Watch** — reusable sync quality workflow with retry and dead-letter protection.
+Each node has its own retry policy: up to 5 retries with a delay of 0 to 30 seconds between attempts.
 
 ## Quick start
 
@@ -72,13 +85,23 @@ python scripts/seed_demo.py
 uvicorn app.main:app --reload
 ```
 
-Open:
+| Where | URL |
+|---|---|
+| Dashboard | `http://127.0.0.1:8000` |
+| API docs | `http://127.0.0.1:8000/docs` |
+| Health | `http://127.0.0.1:8000/api/health` |
 
-- Dashboard: `http://127.0.0.1:8000`
-- API docs: `http://127.0.0.1:8000/docs`
-- Health: `http://127.0.0.1:8000/api/health`
+The seed script creates three workflows:
 
-## Trigger the demo webhook
+| Workflow | Trigger | What it shows |
+|---|---|---|
+| **Vendor Order Intake Guard** | Webhook | Normalization, contract validation, a high-value branch, persistence |
+| **Nightly Data Quality Gate** | Schedule | A health snapshot with a freshness check |
+| **API Sync Reliability Watch** | Manual | A reusable sync check with retries and dead-letter protection |
+
+## Try it
+
+Send an order to the demo webhook:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/webhooks/vendor-orders \
@@ -92,15 +115,26 @@ curl -X POST http://127.0.0.1:8000/api/webhooks/vendor-orders \
   }'
 ```
 
-The run will normalize the payload, validate it, classify it as high-value, attach a finance-review notification and persist the final artifact.
+The run normalizes the payload, validates it, classifies the order as high-value, attaches a finance-review notification and saves the final artifact.
 
-## Failure and recovery demo
+To see recovery, send an invalid email address. The validation step retries by its policy, the run ends as failed, and the original payload appears in **Dead letters**. Correct it and replay.
 
-Send an invalid email address to the webhook. The validation node retries according to its policy, the run ends as failed, and the original payload appears in **Dead letters** for replay after correction.
+## What's new in this version
+
+| What | How it works now |
+|---|---|
+| Pages | Every page of the interface renders on current Starlette |
+| Deleting a workflow | Removes its runs, steps and dead letters with it |
+| Saving a workflow | Cycles, a webhook without a slug, a schedule without an interval and a duplicate slug are rejected with a clear `400` |
+| Updates | Errors from `PATCH` are `400`, and `"definition": null` is handled |
+| Broken definitions | A stored definition that no longer validates fails the run and creates a dead letter instead of waiting in the queue forever |
+| Restart | Runs left queued or running by a stopped process are marked failed on startup and sent to dead letters |
+| Scheduler | Survives a failing tick and does not stack a new run while the previous one is still queued or running |
+| Replay | A dead letter can be replayed once. A second replay returns `409` |
+| Secrets | A value stored under another `OPSWEAVE_SECRET_KEY` gives a clear error |
+| Interface | A graphite theme. Each workflow has a strip of its last 24 runs, the graph shows the path the latest run took, a run shows its steps on one line |
 
 ## Secret vault
-
-Store a credential:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/secrets \
@@ -108,7 +142,7 @@ curl -X POST http://127.0.0.1:8000/api/secrets \
   -d '{"name":"CRM_TOKEN","value":"secret-value"}'
 ```
 
-Reference it inside a workflow node:
+Reference it in a node:
 
 ```json
 {
@@ -118,39 +152,57 @@ Reference it inside a workflow node:
 }
 ```
 
-Secrets are encrypted before being written to SQLite. Secret values are never returned by list endpoints.
+Secrets are encrypted before they reach SQLite. List endpoints never return a value.
 
-## Optional write API protection
+## Protecting writes
 
-Set `OPSWEAVE_WRITE_API_KEY`. When configured, workflow mutations, manual runs, replays and secret writes require:
+Set `OPSWEAVE_WRITE_API_KEY`. Once it is set, workflow changes, manual runs, replays and secret writes require a header:
 
 ```text
 X-OpsWeave-Key: your-key
 ```
 
-Webhook trigger routes stay independent so they can be used by external systems.
+Webhook routes stay open so external systems can call them.
 
-## Data model
+## API
 
-OpsWeave stores:
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health`, `/api/stats` | Health and overview numbers |
+| `GET` `POST` | `/api/workflows` | List and create workflows |
+| `GET` `DELETE` | `/api/workflows/{id}` | Read or delete a workflow |
+| `POST` | `/api/workflows/{id}/run` | Start a manual run |
+| `POST` | `/api/webhooks/{slug}` | Trigger by webhook, `X-Idempotency-Key` supported |
+| `GET` | `/api/runs`, `/api/runs/{id}` | Run history with steps |
+| `POST` | `/api/runs/{id}/replay` | Replay a run |
+| `GET` | `/api/dead-letters` | Failed payloads |
+| `POST` | `/api/dead-letters/{id}/replay` | Replay a dead letter once |
+| `GET` `POST` | `/api/secrets` | List names, store a secret |
+| `GET` | `/api/runs-export.csv` | Run history as CSV |
+| `GET` | `/api/audit` | Audit log |
+| `WS` | `/ws/runs/{id}` | Live run updates |
 
-- workflows and graph definitions
-- run state and trigger metadata
-- every node attempt, latency and payload hash
-- encrypted secret material
-- audit events
-- webhook idempotency keys
-- unresolved and replayed dead letters
+## What is stored
 
-SQLite runs in WAL mode, which keeps the local deployment simple while still supporting concurrent dashboard reads and workflow writes.
+Workflows and their graphs, run state and trigger metadata, every node attempt with latency and payload hashes, encrypted secrets, audit events, webhook idempotency keys, and dead letters with their replay state. SQLite runs in WAL mode, so the dashboard can read while workflows write.
 
-## Test suite
+## Configuration
+
+| Variable | Default |
+|---|---|
+| `OPSWEAVE_DB_PATH` | `data/opsweave.db` |
+| `OPSWEAVE_SECRET_KEY` | `dev-only-change-me`, change it in production |
+| `OPSWEAVE_WRITE_API_KEY` | empty, writes are open |
+| `OPSWEAVE_HOST` | `0.0.0.0` |
+| `OPSWEAVE_PORT` | `8000` |
+
+## Tests
 
 ```bash
-pytest -q
+pytest -q        # 17 tests, no network
 ```
 
-The tests cover graph execution and branching, retry behavior, dead-letter creation, secret encryption, workflow CRUD and the API health contract.
+They cover graph execution and branching, retries, dead-letter creation and replay, secret encryption, workflow validation, the scheduler and the API. GitHub Actions runs them on every push.
 
 ## Docker
 
@@ -158,27 +210,32 @@ The tests cover graph execution and branching, retry behavior, dead-letter creat
 docker compose up --build
 ```
 
-Runtime state is stored under `./data` and survives container restarts.
+State lives in `./data` and survives restarts.
 
-## Project structure
+## Project layout
 
 ```text
 app/
-  config.py        environment settings
+  config.py        settings
   crypto.py        encrypted secret box
-  db.py            SQLite schema and connection layer
-  engine.py        DAG execution, retries and node runtime
-  main.py          FastAPI, WebSocket, API and HTML routes
+  db.py            SQLite schema and connections
+  engine.py        graph execution, retries, node runtime
+  main.py          API, WebSocket and pages
   models.py        workflow contracts
-  repository.py    persistence layer
-  scheduler.py     scheduled workflow runner
-  templates/       operations UI
-  static/          dashboard styling
+  repository.py    persistence
+  scheduler.py     scheduled runs
+  templates/       interface
+  static/          styles
 scripts/
-  seed_demo.py      realistic demo workflows
-tests/              automated tests
+  seed_demo.py     demo workflows
+docs/              architecture, API examples, security notes, screenshots
+tests/
 ```
 
-## Why this project exists
+---
 
-A lot of automation work starts as a Python script and later needs reliability: schedules, retry behavior, observability, secrets, audit history and a way to replay failures. OpsWeave demonstrates that complete path in one self-contained project.
+<div align="center">
+
+Built by **[Koncha Artyom](https://github.com/artyom129)** · MIT License
+
+</div>
